@@ -38,8 +38,9 @@ proc New {app} {
     $app.f.txt edit reset
     unset -nocomplain state
     set state(filename) ""
-    set state(encoding) [encoding system]
+    set state(encoding) "utf-8"
     set state(translation) auto
+    set state(bom) 0
     wm title $app "Unnamed - Notepad"
     UpdateStatusPos $app insert
 }
@@ -55,22 +56,27 @@ proc Open {app} {
 # line ending format in use.
 proc OpenFile {app path} {
     upvar #0 $app state
-    set f [open_bom $path r]
-    set state(filename) $path
-    set state(encoding) [fconfigure $f -encoding]
-    set state(start) [tell $f]
-    set state(bom) [expr {$state(start) != 0}]
-    gets $f line
-    set state(translation) [expr {([string index $line end] == "\r") ? "crlf" : "lf"}]
-    seek $f $state(start)
-    fconfigure $f -translation $state(translation)
-    set data [read $f]
-    close $f
-    $app.f.txt delete 1.0 end
-    $app.f.txt insert end $data
-    $app.f.txt edit modified 0
-    $app.f.txt edit reset
-    $app.f.txt see 1.0
+    if {![file exists $path]} {
+        New $app
+        set state(filename) $path
+    } else {
+        set f [open_bom $path r]
+        set state(filename) $path
+        set state(encoding) [fconfigure $f -encoding]
+        set state(start) [tell $f]
+        set state(bom) [expr {$state(start) != 0}]
+        gets $f line
+        set state(translation) [expr {([string index $line end] == "\r") ? "crlf" : "lf"}]
+        seek $f $state(start)
+        fconfigure $f -translation $state(translation)
+        set data [read $f]
+        close $f
+        $app.f.txt delete 1.0 end
+        $app.f.txt insert end $data
+        $app.f.txt edit modified 0
+        $app.f.txt edit reset
+        $app.f.txt see 1.0
+    }
     wm title $app [format {%s - Notepad} [file tail $path]]
     UpdateStatusPos $app insert
 }
@@ -80,7 +86,7 @@ proc Save {app} {
     if {$state(filename) eq ""} {
         SaveAs $app
     } else {
-        SaveFile $app $stats(filename)
+        SaveFile $app $state(filename)
     }
 }
 
