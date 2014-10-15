@@ -307,6 +307,7 @@ proc main {filename} {
     if {$filename ne ""} {
         after idle [list OpenFile $app $filename]
     }
+    focus -force $app.f.txt
     wm deiconify $app
     tkwait window $app
 }
