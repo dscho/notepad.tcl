@@ -200,13 +200,13 @@ proc OnMotion {app w x y} {
 proc main {filename} {
     variable UID
     option add *Menu.tearOff 0 widgetDefault
-    
+
     set app [toplevel .ed[incr UID] -class Notepad]
     upvar #0 $app state
     array set state {}
     wm withdraw $app
     wm title $app "Notepad"
-    
+
     $app configure -menu [set menu [menu $app.menu]]
     $menu add cascade -label File -menu [menu $menu.file]
     $menu.file add command -label "New" -command [list New $app]
@@ -243,7 +243,7 @@ proc main {filename} {
     $menu.help add command -label "View Help" -command {tk_messageBox -message "no help"}
     $menu.help add separator
     $menu.help add command -label "About Help" -command [list About $app]
-    
+
     # Match the Vista/Windows 7 theme element around the edit area.
     # Default to something sensible on X11.
     ttk::style theme settings default {
@@ -266,24 +266,24 @@ proc main {filename} {
     }
     bind TextFrame <Enter> {%W instate !disabled {%W state active}}
     bind TextFrame <Leave> {%W state !active}
-    
+
     set f [ttk::frame $app.f -style TextFrame -class TextFrame -padding 1]
     set txt [text $f.txt -undo true -borderwidth 0 -relief flat]
     set vs [ttk::scrollbar $f.vs -command [list $txt yview]]
     $txt configure -yscrollcommand [list $vs set]
-    
+
     grid $txt $vs -sticky news
     grid columnconfigure $f 0 -weight 1
     grid rowconfigure $f 0 -weight 1
 
     set status [CreateStatusbar $app $app.status]
     set state(statusbar) 1
-    
+
     grid $f -sticky news
     grid $status -sticky ew
     grid columnconfigure $app 0 -weight 1
     grid rowconfigure $app 0 -weight 1
-    
+
     if {[info commands tk::_TextSetCursor] eq {}} {
         # override key handling to update the statusbar position field.
         rename tk::TextSetCursor tk::_TextSetCursor
@@ -298,7 +298,7 @@ proc main {filename} {
         bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
         bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
     }
-    
+
     bind $app <Control-F2> {console show}
     wm protocol $app DELETE [list Exit $app]
     if {$filename ne ""} {
