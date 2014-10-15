@@ -300,6 +300,9 @@ proc main {filename} {
     }
 
     bind $app <Control-F2> {console show}
+    bind $app <Control-o> [list Open $app]
+    bind $app <Control-s> [list Save $app]
+    bind $app <Control-S> [list SaveAs $app]
     wm protocol $app DELETE [list Exit $app]
     if {$filename ne ""} {
         after idle [list OpenFile $app $filename]
