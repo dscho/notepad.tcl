@@ -309,6 +309,13 @@ proc main {filename} {
     }
     focus -force $app.f.txt
     wm deiconify $app
+    if {[tk windowingsystem] eq "aqua"} {
+        exec /usr/bin/osascript -e {
+            tell app "Finder"
+                set frontmost of process "Wish" to true
+            end tell
+        }
+    }
     tkwait window $app
 }
 
