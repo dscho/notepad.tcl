@@ -299,7 +299,7 @@ proc main {filename} {
         bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
     }
 
-    bind $app <Control-F2> {console show}
+    if {[tk windowingsystem] eq "win32"} {bind $app <Control-F2> {console show}}
     bind $app <Control-o> [list Open $app]
     bind $app <Control-s> [list Save $app]
     bind $app <Control-S> [list SaveAs $app]
