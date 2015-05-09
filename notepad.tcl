@@ -71,6 +71,9 @@ proc OpenFile {app path} {
         fconfigure $f -translation $state(translation)
         set data [read $f]
         close $f
+        if {$state(showwhitespace)} {
+            set data [ConvertWhitespace $data true]
+        }
         $app.f.txt delete 1.0 end
         $app.f.txt insert end $data
         $app.f.txt edit modified 0
@@ -106,7 +109,11 @@ proc SaveFile {app path} {
     set f [open $path w]
     fconfigure $f -encoding $state(encoding) -translation $state(translation)
     if {$state(bom)} { puts -nonewline $f "\ufeff" }
-    puts -nonewline $f [$app.f.txt get 1.0 "end - 1 char"]
+    set data [$app.f.txt get 1.0 "end - 1 char"]
+    if {$state(showwhitespace)} {
+        set data [ConvertWhitespace $data false]
+    }
+    puts -nonewline $f $data
     close $f
     $app.f.txt edit modified 0
 }
@@ -197,6 +204,33 @@ proc OnMotion {app w x y} {
     } err]} { puts stderr $err }
 }
 
+proc ConvertWhitespace {data showwhitespace} {
+    if {$showwhitespace} {
+        set data [string map {\u0020 \u00b7 \t \u00bb\t} $data]
+    } else {
+        set data [string map {\u00b7 \u0020 \u00bb\t \t} $data]
+    }
+    return $data
+}
+
+proc OnKeyWhitespace {w char} {
+    upvar #0 [winfo toplevel $w] state
+    if {$state(showwhitespace)} {
+        switch -exact -- $char {
+            \u0020 {set char \u00b7}
+            \u0009 {set char \u00bb\t}
+        }
+    }
+    tk::TextInsert $w $char
+    UpdateStatusPos [winfo toplevel $w] insert
+}
+
+proc OnShowWhitespace {app} {
+    upvar #0 $app state
+    set data [$app.f.txt get 1.0 "end - 1c"]
+    $app.f.txt replace 1.0 end [ConvertWhitespace $data $state(showwhitespace)]
+}
+
 proc main {filename} {
     variable UID
     option add *Menu.tearOff 0 widgetDefault
@@ -239,6 +273,8 @@ proc main {filename} {
     $menu add cascade -label "View" -menu [menu $menu.view]
     $menu.view add checkbutton -label "Status Bar" -onvalue 1 -offvalue 0 \
         -variable [namespace which -variable $app](statusbar) -command [list OnStatusbar $app]
+    $menu.view add checkbutton -label "Show Whitespace" -onvalue 1 -offvalue 0 \
+        -variable [namespace which -variable $app](showwhitespace) -command [list OnShowWhitespace $app]
     $menu add cascade -label "Help" -menu [menu $menu.help]
     $menu.help add command -label "View Help" -command {tk_messageBox -message "no help"}
     $menu.help add separator
@@ -298,6 +334,10 @@ proc main {filename} {
         bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
         bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
     }
+
+    bind $app <Key> {+UpdateStatusPos [winfo toplevel %W] insert}
+    bind $app.f.txt <Key-space> {OnKeyWhitespace %W %A; break}
+    bind $app.f.txt <Key-Tab> {OnKeyWhitespace %W %A; break}
 
     if {[tk windowingsystem] eq "win32"} {bind $app <Control-F2> {console show}}
     bind $app <Control-o> [list Open $app]
