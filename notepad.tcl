@@ -251,7 +251,31 @@ proc OnShowWhitespace {app} {
     $app.f.txt replace 1.0 end [ConvertWhitespace $data $state(showwhitespace)]
 }
 
-proc main {filename} {
+proc Pop {varname {nth 0}} {
+    upvar $varname args
+    set r [lindex $args $nth]
+    set args [lreplace $args $nth $nth]
+    return $r
+}
+
+proc ProcessArguments {app arglist} {
+    upvar #0 $app state
+    while {[string match -* [set option [lindex $arglist 0]]]} {
+        switch -exact -- $option {
+            -whitespace { set state(showwhitespace) [expr {!![Pop arglist 1]}] }
+            -columnmark { set state(showcolumnlimit) [expr {!![Pop arglist 1]}] }
+            --          { Pop arglist; break }
+            default { break }
+        }
+        Pop arglist
+    }
+    if {[llength $arglist] > 1} {
+        return -code error "usage: notepad ?-whitespace 0|1? ?-columnmark 0|1? filename {$arglist}"
+    }
+    return [lindex $arglist 0]
+}
+
+proc main {args} {
     variable UID
     option add *Menu.tearOff 0 widgetDefault
 
@@ -260,6 +284,8 @@ proc main {filename} {
     array set state {statusbar 1 showwhitespace 0 showcolumnlimit 0}
     wm withdraw $app
     wm title $app "Notepad"
+
+    set filename [ProcessArguments $app $args]
 
     $app configure -menu [set menu [menu $app.menu]]
     $menu add cascade -label File -menu [menu $menu.file]
@@ -331,7 +357,7 @@ proc main {filename} {
     $txt configure -yscrollcommand [list $vs set]
 
     set bar [frame $f.bar -borderwidth 0 -background grey60 \
-                 -width 2 -height 10 -cursor [$txt cget -cursor]]
+                 -width 1 -height 10 -cursor [$txt cget -cursor]]
 
     grid $txt $vs -sticky news
     grid columnconfigure $f 0 -weight 1
