@@ -204,6 +204,26 @@ proc OnMotion {app w x y} {
     } err]} { puts stderr $err }
 }
 
+proc OnTextWidgetConfigure {app x y w h} {
+    upvar #0 $app state
+    if {$state(showcolumnlimit)} {
+        set pos [font measure [$app.f.txt cget -font] [string repeat "0" 76]]
+        $app.f.bar configure -height $h
+        place $app.f.bar -x [expr {$x + $pos}] -y $y
+    }
+}
+
+proc OnShowColumnLimit {app} {
+    upvar #0 $app state
+    if {$state(showcolumnlimit)} {
+        set w $app.f.txt
+        OnTextWidgetConfigure $app \
+            [winfo x $w] [winfo y $w] [winfo width $w] [winfo height $w]
+    } else {
+        place forget $app.f.bar
+    }
+}
+
 proc ConvertWhitespace {data showwhitespace} {
     if {$showwhitespace} {
         set data [string map {\u0020 \u00b7 \t \u00bb\t} $data]
@@ -237,7 +257,7 @@ proc main {filename} {
 
     set app [toplevel .ed[incr UID] -class Notepad]
     upvar #0 $app state
-    array set state {}
+    array set state {statusbar 1 showwhitespace 0 showcolumnlimit 0}
     wm withdraw $app
     wm title $app "Notepad"
 
@@ -273,8 +293,10 @@ proc main {filename} {
     $menu add cascade -label "View" -menu [menu $menu.view]
     $menu.view add checkbutton -label "Status Bar" -onvalue 1 -offvalue 0 \
         -variable [namespace which -variable $app](statusbar) -command [list OnStatusbar $app]
-    $menu.view add checkbutton -label "Show Whitespace" -onvalue 1 -offvalue 0 \
+    $menu.view add checkbutton -label "Show whitespace" -onvalue 1 -offvalue 0 \
         -variable [namespace which -variable $app](showwhitespace) -command [list OnShowWhitespace $app]
+    $menu.view add checkbutton -label "Show column limit" -onvalue 1 -offvalue 0 \
+        -variable [namespace which -variable $app](showcolumnlimit) -command [list OnShowColumnLimit $app]
     $menu add cascade -label "Help" -menu [menu $menu.help]
     $menu.help add command -label "View Help" -command {tk_messageBox -message "no help"}
     $menu.help add separator
@@ -308,6 +330,9 @@ proc main {filename} {
     set vs [ttk::scrollbar $f.vs -command [list $txt yview]]
     $txt configure -yscrollcommand [list $vs set]
 
+    set bar [frame $f.bar -borderwidth 0 -background grey60 \
+                 -width 2 -height 10 -cursor [$txt cget -cursor]]
+
     grid $txt $vs -sticky news
     grid columnconfigure $f 0 -weight 1
     grid rowconfigure $f 0 -weight 1
@@ -320,6 +345,7 @@ proc main {filename} {
     grid columnconfigure $app 0 -weight 1
     grid rowconfigure $app 0 -weight 1
 
+    bind $app.f.txt <Configure> [list +OnTextWidgetConfigure $app %x %y %w %h]
     bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
     bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
     bind $app.f.txt <Key-space> {OnKeyWhitespace %W %A; break}
