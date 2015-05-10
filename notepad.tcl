@@ -320,24 +320,11 @@ proc main {filename} {
     grid columnconfigure $app 0 -weight 1
     grid rowconfigure $app 0 -weight 1
 
-    if {[info commands tk::_TextSetCursor] eq {}} {
-        # override key handling to update the statusbar position field.
-        rename tk::TextSetCursor tk::_TextSetCursor
-        proc tk::TextSetCursor {w pos} {
-            set top [winfo toplevel $w]
-            if {[winfo class $top] eq "Notepad"} {
-                UpdateStatusPos $top $pos
-            }
-            return [tk::_TextSetCursor $w $pos]
-        }
-        # update the statusbar position on mouse clicks.
-        bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
-        bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
-    }
-
-    bind $app <Key> {+UpdateStatusPos [winfo toplevel %W] insert}
+    bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
+    bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
     bind $app.f.txt <Key-space> {OnKeyWhitespace %W %A; break}
     bind $app.f.txt <Key-Tab> {OnKeyWhitespace %W %A; break}
+    bind $app <Key> {+UpdateStatusPos [winfo toplevel %W] insert}
 
     if {[tk windowingsystem] eq "win32"} {bind $app <Control-F2> {console show}}
     bind $app <Control-o> [list Open $app]
