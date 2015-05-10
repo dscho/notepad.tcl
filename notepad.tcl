@@ -71,6 +71,9 @@ proc OpenFile {app path} {
         fconfigure $f -translation $state(translation)
         set data [read $f]
         close $f
+        if {$state(showwhitespace)} {
+            set data [ConvertWhitespace $data true]
+        }
         $app.f.txt delete 1.0 end
         $app.f.txt insert end $data
         $app.f.txt edit modified 0
@@ -106,7 +109,11 @@ proc SaveFile {app path} {
     set f [open $path w]
     fconfigure $f -encoding $state(encoding) -translation $state(translation)
     if {$state(bom)} { puts -nonewline $f "\ufeff" }
-    puts -nonewline $f [$app.f.txt get 1.0 "end - 1 char"]
+    set data [$app.f.txt get 1.0 "end - 1 char"]
+    if {$state(showwhitespace)} {
+        set data [ConvertWhitespace $data false]
+    }
+    puts -nonewline $f $data
     close $f
     $app.f.txt edit modified 0
 }
@@ -197,15 +204,88 @@ proc OnMotion {app w x y} {
     } err]} { puts stderr $err }
 }
 
-proc main {filename} {
+proc OnTextWidgetConfigure {app x y w h} {
+    upvar #0 $app state
+    if {$state(showcolumnlimit)} {
+        set pos [font measure [$app.f.txt cget -font] [string repeat "0" 76]]
+        $app.f.bar configure -height $h
+        place $app.f.bar -x [expr {$x + $pos}] -y $y
+    }
+}
+
+proc OnShowColumnLimit {app} {
+    upvar #0 $app state
+    if {$state(showcolumnlimit)} {
+        set w $app.f.txt
+        OnTextWidgetConfigure $app \
+            [winfo x $w] [winfo y $w] [winfo width $w] [winfo height $w]
+    } else {
+        place forget $app.f.bar
+    }
+}
+
+proc ConvertWhitespace {data showwhitespace} {
+    if {$showwhitespace} {
+        set data [string map {\u0020 \u00b7 \t \u00bb\t} $data]
+    } else {
+        set data [string map {\u00b7 \u0020 \u00bb\t \t} $data]
+    }
+    return $data
+}
+
+proc OnKeyWhitespace {w char} {
+    upvar #0 [winfo toplevel $w] state
+    if {$state(showwhitespace)} {
+        switch -exact -- $char {
+            \u0020 {set char \u00b7}
+            \u0009 {set char \u00bb\t}
+        }
+    }
+    tk::TextInsert $w $char
+    UpdateStatusPos [winfo toplevel $w] insert
+}
+
+proc OnShowWhitespace {app} {
+    upvar #0 $app state
+    set data [$app.f.txt get 1.0 "end - 1c"]
+    $app.f.txt replace 1.0 end [ConvertWhitespace $data $state(showwhitespace)]
+}
+
+proc Pop {varname {nth 0}} {
+    upvar $varname args
+    set r [lindex $args $nth]
+    set args [lreplace $args $nth $nth]
+    return $r
+}
+
+proc ProcessArguments {app arglist} {
+    upvar #0 $app state
+    while {[string match -* [set option [lindex $arglist 0]]]} {
+        switch -exact -- $option {
+            -whitespace { set state(showwhitespace) [expr {!![Pop arglist 1]}] }
+            -columnmark { set state(showcolumnlimit) [expr {!![Pop arglist 1]}] }
+            --          { Pop arglist; break }
+            default { break }
+        }
+        Pop arglist
+    }
+    if {[llength $arglist] > 1} {
+        return -code error "usage: notepad ?-whitespace 0|1? ?-columnmark 0|1? filename {$arglist}"
+    }
+    return [lindex $arglist 0]
+}
+
+proc main {args} {
     variable UID
     option add *Menu.tearOff 0 widgetDefault
 
     set app [toplevel .ed[incr UID] -class Notepad]
     upvar #0 $app state
-    array set state {}
+    array set state {statusbar 1 showwhitespace 0 showcolumnlimit 0}
     wm withdraw $app
     wm title $app "Notepad"
+
+    set filename [ProcessArguments $app $args]
 
     $app configure -menu [set menu [menu $app.menu]]
     $menu add cascade -label File -menu [menu $menu.file]
@@ -239,6 +319,10 @@ proc main {filename} {
     $menu add cascade -label "View" -menu [menu $menu.view]
     $menu.view add checkbutton -label "Status Bar" -onvalue 1 -offvalue 0 \
         -variable [namespace which -variable $app](statusbar) -command [list OnStatusbar $app]
+    $menu.view add checkbutton -label "Show whitespace" -onvalue 1 -offvalue 0 \
+        -variable [namespace which -variable $app](showwhitespace) -command [list OnShowWhitespace $app]
+    $menu.view add checkbutton -label "Show column limit" -onvalue 1 -offvalue 0 \
+        -variable [namespace which -variable $app](showcolumnlimit) -command [list OnShowColumnLimit $app]
     $menu add cascade -label "Help" -menu [menu $menu.help]
     $menu.help add command -label "View Help" -command {tk_messageBox -message "no help"}
     $menu.help add separator
@@ -272,6 +356,9 @@ proc main {filename} {
     set vs [ttk::scrollbar $f.vs -command [list $txt yview]]
     $txt configure -yscrollcommand [list $vs set]
 
+    set bar [frame $f.bar -borderwidth 0 -background grey60 \
+                 -width 1 -height 10 -cursor [$txt cget -cursor]]
+
     grid $txt $vs -sticky news
     grid columnconfigure $f 0 -weight 1
     grid rowconfigure $f 0 -weight 1
@@ -284,22 +371,14 @@ proc main {filename} {
     grid columnconfigure $app 0 -weight 1
     grid rowconfigure $app 0 -weight 1
 
-    if {[info commands tk::_TextSetCursor] eq {}} {
-        # override key handling to update the statusbar position field.
-        rename tk::TextSetCursor tk::_TextSetCursor
-        proc tk::TextSetCursor {w pos} {
-            set top [winfo toplevel $w]
-            if {[winfo class $top] eq "Notepad"} {
-                UpdateStatusPos $top $pos
-            }
-            return [tk::_TextSetCursor $w $pos]
-        }
-        # update the statusbar position on mouse clicks.
-        bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
-        bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
-    }
+    bind $app.f.txt <Configure> [list +OnTextWidgetConfigure $app %x %y %w %h]
+    bind $app.f.txt <ButtonRelease-1> {+UpdateStatusPos [winfo toplevel %W] insert}
+    bind $app.f.txt <ButtonPress-1> {+UpdateStatusPos [winfo toplevel %W] [%W index @%x,%y]}
+    bind $app.f.txt <Key-space> {OnKeyWhitespace %W %A; break}
+    bind $app.f.txt <Key-Tab> {OnKeyWhitespace %W %A; break}
+    bind $app <Key> {+UpdateStatusPos [winfo toplevel %W] insert}
 
-    bind $app <Control-F2> {console show}
+    if {[tk windowingsystem] eq "win32"} {bind $app <Control-F2> {console show}}
     bind $app <Control-o> [list Open $app]
     bind $app <Control-s> [list Save $app]
     bind $app <Control-S> [list SaveAs $app]
